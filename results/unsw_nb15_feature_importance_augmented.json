@@ -1,0 +1,66 @@
+{
+  "dataset": "unsw_nb15",
+  "variant": "augmented",
+  "top_features": [
+    {
+      "feature": "ct_state_ttl",
+      "importance": 0.10926708408959646
+    },
+    {
+      "feature": "sttl",
+      "importance": 0.10750912497748258
+    },
+    {
+      "feature": "dload",
+      "importance": 0.05472440846840672
+    },
+    {
+      "feature": "dttl",
+      "importance": 0.048433352025470826
+    },
+    {
+      "feature": "tcprtt",
+      "importance": 0.04289159528951071
+    },
+    {
+      "feature": "synack",
+      "importance": 0.03795289003851393
+    },
+    {
+      "feature": "ct_srv_dst",
+      "importance": 0.03779909587728449
+    },
+    {
+      "feature": "sload",
+      "importance": 0.03560604670806
+    },
+    {
+      "feature": "dmean",
+      "importance": 0.033266977842185526
+    },
+    {
+      "feature": "rate",
+      "importance": 0.031157339446604662
+    },
+    {
+      "feature": "proto",
+      "importance": 0.030251949705076296
+    },
+    {
+      "feature": "ackdat",
+      "importance": 0.028224967029782732
+    },
+    {
+      "feature": "sbytes",
+      "importance": 0.0279437874078828
+    },
+    {
+      "feature": "ct_dst_src_ltm",
+      "importance": 0.026067406869512817
+    },
+    {
+      "feature": "dinpkt",
+      "importance": 0.026048246406200525
+    }
+  ]
+}

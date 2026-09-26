@@ -1,0 +1,21 @@
+{
+  "dataset": "nsl_kdd",
+  "prior_sampling": {
+    "mean_ks_statistic": 0.5699365902133383,
+    "mean_total_variation_distance": 0.04996687109276391
+  },
+  "posterior_sampling": {
+    "mean_ks_statistic": 0.6040502692031445,
+    "mean_total_variation_distance": 0.07178944309975299
+  },
+  "latent_space": {
+    "latent_dim": 16,
+    "posterior_mu_mean": -0.014700271189212799,
+    "posterior_mu_std": 0.42416927218437195,
+    "posterior_std_mean": 0.8843448758125305,
+    "prior_mean": 0.0,
+    "prior_std": 1.0
+  },
+  "posterior_sampling_helped": false,
+  "finding": "Real normal traffic encodes to a latent mu with std 0.424, narrower than the N(0,1) prior the VAE was regularized against, which raised the hypothesis that sampling from a Gaussian fitted to that real aggregate posterior (mean + std of all real mu vectors) would generate more realistic synthetic traffic than sampling from the raw prior. Measured result: it did not help. Mean numeric-feature KS statistic went from 0.5699 (prior) to 0.6041 (posterior), i.e. got worse by 0.0341, and mean categorical total-variation distance went from 0.0500 to 0.0718, got worse by 0.0218. Candidate explanation: this 'aggregate posterior' was fit as a single diagonal Gaussian over ALL real mu vectors at once, which collapses whatever cluster structure exists in the latent space (e.g. distinct regions for different protocols/services). During training the decoder only ever sees a per-sample reparameterized z = mu_i + eps*sigma_i, never a z drawn from this coarser global fit, so sampling from it lands the decoder in latent regions that do not correspond well to any specific real traffic mode. A proper aggregate-posterior sampler (mixture of per-sample Gaussians: pick a random training point i, then sample z ~ N(mu_i, sigma_i)) would preserve that structure and was not implemented here -- noted as a follow-up rather than pursued, since the simpler prior sampling already measured as good or better."
+}

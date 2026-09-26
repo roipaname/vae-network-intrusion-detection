@@ -1,0 +1,66 @@
+{
+  "dataset": "nsl_kdd",
+  "variant": "augmented",
+  "top_features": [
+    {
+      "feature": "src_bytes",
+      "importance": 0.14352992899937142
+    },
+    {
+      "feature": "dst_bytes",
+      "importance": 0.09847441533312887
+    },
+    {
+      "feature": "flag",
+      "importance": 0.09410443131923425
+    },
+    {
+      "feature": "service",
+      "importance": 0.07846319206711393
+    },
+    {
+      "feature": "same_srv_rate",
+      "importance": 0.0644528878904411
+    },
+    {
+      "feature": "dst_host_same_srv_rate",
+      "importance": 0.05052237917652115
+    },
+    {
+      "feature": "protocol_type",
+      "importance": 0.03994911967831358
+    },
+    {
+      "feature": "dst_host_srv_count",
+      "importance": 0.0388932418249064
+    },
+    {
+      "feature": "diff_srv_rate",
+      "importance": 0.03725076313077656
+    },
+    {
+      "feature": "count",
+      "importance": 0.035159508926578105
+    },
+    {
+      "feature": "dst_host_diff_srv_rate",
+      "importance": 0.03234685245909395
+    },
+    {
+      "feature": "serror_rate",
+      "importance": 0.03183894747749388
+    },
+    {
+      "feature": "dst_host_serror_rate",
+      "importance": 0.03183837666322675
+    },
+    {
+      "feature": "dst_host_same_src_port_rate",
+      "importance": 0.030692205394878363
+    },
+    {
+      "feature": "srv_serror_rate",
+      "importance": 0.026500703935576263
+    }
+  ]
+}
