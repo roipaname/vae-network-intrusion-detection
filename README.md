@@ -265,6 +265,23 @@ History, and a Dataset page for each of NSL-KDD/UNSW-NB15.
 cd frontend && npm run dev
 ```
 
+## Pre-built models and datasets
+
+To skip the pipeline, download the trained models, raw datasets and processed
+data from the
+[v1.0-artifacts release](https://github.com/roipaname/vae-network-intrusion-detection/releases/tag/v1.0-artifacts)
+and unzip them in the repo root:
+
+```bash
+gh release download v1.0-artifacts --repo roipaname/vae-network-intrusion-detection
+shasum -a 256 -c SHA256SUMS.txt
+unzip models.zip && unzip data-raw.zip && unzip data-processed.zip
+```
+
+These produce exactly the metrics in `results/`. They are too large to commit
+to git (each UNSW-NB15 detector is ~219 MB), so they are published as release
+assets instead.
+
 ## 14. How to run the full project
 
 ```bash
