@@ -1,22 +1,3 @@
-"""
-Intrusion detector: baseline (real data only) vs VAE-augmented (real +
-synthetic normal traffic) experiments.
-
-Random Forest is the model: it's a strong, low-tuning-effort baseline for
-tabular intrusion detection, trains quickly even on 100k+ rows, needs no
-feature-scale assumptions beyond what preprocessing already did, and exposes
-feature importances directly for the "why was this flagged" explanation
-used later in the dashboard.
-
-Both experiments use identical hyperparameters and the same untouched real
-test set, so any difference in Phase 6's metrics is attributable to the
-training data (real vs real+synthetic), not to the model or the evaluation.
-
-Run directly to train both experiments for one or both datasets:
-
-    uv run python -m src.detector --dataset nsl_kdd
-"""
-
 import argparse
 import time
 
@@ -45,7 +26,7 @@ def build_detector() -> RandomForestClassifier:
 
 
 def train_baseline(dataset_name: str) -> RandomForestClassifier:
-    """Experiment A: train on real training data only."""
+    """Train on real data only."""
     data = load_processed(dataset_name)
     X_train, y_train = data["X_train"], data["y_train"]
 
@@ -68,13 +49,13 @@ def train_baseline(dataset_name: str) -> RandomForestClassifier:
 
 
 def train_augmented(dataset_name: str) -> RandomForestClassifier:
-    """Experiment B: train on real training data + VAE-generated synthetic normal traffic."""
+    """Train on real data plus VAE-generated normal samples."""
     data = load_processed(dataset_name)
     X_train, y_train = data["X_train"], data["y_train"]
-    X_synthetic = load_synthetic(dataset_name)  # prior-sampled, see src/vae.py
+    X_synthetic = load_synthetic(dataset_name)
 
     X_train_augmented = np.vstack([X_train, X_synthetic])
-    y_synthetic = np.zeros(X_synthetic.shape[0], dtype=y_train.dtype)  # synthetic traffic is always "normal"
+    y_synthetic = np.zeros(X_synthetic.shape[0], dtype=y_train.dtype)  # synthetic samples are all normal
     y_train_augmented = np.concatenate([y_train, y_synthetic])
 
     logger.info(
@@ -87,7 +68,7 @@ def train_augmented(dataset_name: str) -> RandomForestClassifier:
     model.fit(X_train_augmented, y_train_augmented)
 
     train_accuracy = model.score(X_train_augmented, y_train_augmented)
-    test_accuracy = model.score(data["X_test"], data["y_test"])  # same untouched real test set
+    test_accuracy = model.score(data["X_test"], data["y_test"])
     logger.info(f"[{dataset_name}] augmented: train_accuracy={train_accuracy:.4f} test_accuracy={test_accuracy:.4f}")
 
     path = detector_model_path(dataset_name, augmented=True)
@@ -101,12 +82,6 @@ def load_detector(dataset_name: str, augmented: bool = False) -> RandomForestCla
 
 
 def predict_single(model: RandomForestClassifier, x_row: np.ndarray) -> dict:
-    """
-    Run one already-preprocessed feature row through an already-loaded
-    detector. Takes a loaded model (not a dataset name) so callers -- the
-    backend in particular -- can cache models in memory and avoid a
-    joblib.load() per request.
-    """
     start = time.perf_counter()
     proba = model.predict_proba(x_row.reshape(1, -1))[0]
     latency_ms = (time.perf_counter() - start) * 1000

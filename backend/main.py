@@ -1,23 +1,3 @@
-"""
-FastAPI backend for the NEXUS AI dashboard.
-
-Every endpoint either reads a file the ML pipeline actually produced
-(results/*.json, data/processed/*/dataset_info.json) or runs a real
-preprocessed record through a real trained detector loaded from models/.
-Nothing here is a hardcoded or invented number.
-
-NSL-KDD and UNSW-NB15 are flow-feature datasets: they have no real IP
-addresses or timestamps. Endpoints that need something to display for those
-fields synthesize a stable, deterministic value from the record's index --
-clearly separated from genuine model output (prediction/confidence) and
-genuine dataset fields (protocol, service, attack category), and never
-treated as captured network data anywhere in the pipeline.
-
-Run with:
-
-    uv run uvicorn backend.main:app --reload --port 8000
-"""
-
 import json
 import random
 from contextlib import asynccontextmanager
@@ -48,7 +28,6 @@ _context_cache: dict[str, dict] = {}
 
 
 def _load_context(dataset_name: str) -> dict:
-    """Load and cache everything an endpoint might need for a dataset: processed arrays, both detectors, and the VAE."""
     logger.info(f"Loading pipeline artifacts for '{dataset_name}' into memory")
     data = load_processed(dataset_name)
     models = {
@@ -86,9 +65,6 @@ app.add_middleware(
 )
 
 
-# --------------------------------------------------------------------------
-# Shared helpers
-# --------------------------------------------------------------------------
 def _validate_dataset(dataset: str) -> None:
     if dataset not in DATASET_NAMES:
         raise HTTPException(status_code=404, detail=f"Unknown dataset '{dataset}'. Expected one of {DATASET_NAMES}.")
@@ -132,7 +108,7 @@ def _load_dataset_info(dataset_name: str) -> dict:
 
 
 def _synthetic_ip(index: int, block: int) -> str:
-    """Deterministic, display-only pseudo-IP derived from a record's index (see module docstring)."""
+    """Fake IP for display, derived from the record index."""
     b = (block * 37 + 11) % 200 + 1
     c = (index // 256) % 256
     d = index % 256
@@ -140,7 +116,6 @@ def _synthetic_ip(index: int, block: int) -> str:
 
 
 def _raw_preview(dataset_name: str, index: int) -> dict:
-    """Real dataset fields (protocol/service/attack category) for one test-set row."""
     preview = _get_context(dataset_name)["data"]["test_raw_preview"].iloc[index]
     protocol_col = "protocol_type" if "protocol_type" in preview else "proto"
     return {
@@ -154,17 +129,11 @@ def _timestamp(offset_seconds: float = 0.0) -> str:
     return (datetime.now(timezone.utc) - timedelta(seconds=offset_seconds)).isoformat()
 
 
-# --------------------------------------------------------------------------
-# Health
-# --------------------------------------------------------------------------
 @app.get("/health")
 def health():
     return {"status": "ok", "datasets_loaded": list(_context_cache.keys())}
 
 
-# --------------------------------------------------------------------------
-# Dataset info
-# --------------------------------------------------------------------------
 @app.get("/api/datasets")
 def list_datasets():
     return {
@@ -184,8 +153,7 @@ def get_dataset(dataset: str):
 
 @app.get("/api/model/{dataset}")
 def get_model_info(dataset: str):
-    """VAE + detector metadata for the 'AI Model' page."""
-    _get_context(dataset)  # ensures dataset is valid and loaded
+    _get_context(dataset)
     checkpoint = torch.load(vae_model_path(dataset), map_location="cpu", weights_only=False)
     history = checkpoint["history"]
 
@@ -194,8 +162,7 @@ def get_model_info(dataset: str):
     synthetic_validation = _load_result_json(f"{dataset}_synthetic_validation.json")
     dataset_info = _load_dataset_info(dataset)
     synthetic_samples = synthetic_validation["synthetic_samples"]
-    # dataset_info's train_records is the raw count before dedup; the
-    # detector actually trained on the deduplicated set (see src/data.py).
+    # detector trained on the deduplicated set
     real_training_samples = dataset_info["train_records"] - dataset_info["duplicate_rows_in_train"]
 
     return {
@@ -234,15 +201,7 @@ def get_model_info(dataset: str):
 
 @app.get("/api/latent-projection")
 def get_latent_projection(dataset: str = "nsl_kdd", n_per_group: int = 200):
-    """
-    A genuine 2D view of the VAE's latent space: real normal traffic, VAE-
-    generated synthetic normal traffic (re-encoded), and real attack traffic
-    the VAE never trained on, all encoded through the same trained encoder
-    and projected to 2D with PCA fit across all three groups together.
-
-    Nothing here is decorative -- every point is a real record's actual
-    encoded position, just dimensionality-reduced for plotting.
-    """
+    """Encode real normal, synthetic and attack samples and project to 2D with PCA."""
     from sklearn.decomposition import PCA
 
     ctx = _get_context(dataset)
@@ -280,9 +239,6 @@ def get_latent_projection(dataset: str = "nsl_kdd", n_per_group: int = 200):
     }
 
 
-# --------------------------------------------------------------------------
-# Overview / metrics / feature importance
-# --------------------------------------------------------------------------
 @app.get("/api/summary")
 def get_summary(dataset: str = "nsl_kdd", variant: str = ACTIVE_DETECTOR_VARIANT):
     _validate_dataset(dataset)
@@ -319,12 +275,8 @@ def get_feature_importance(dataset: str = "nsl_kdd", variant: str = ACTIVE_DETEC
     return _load_result_json(f"{dataset}_feature_importance_{variant}.json")
 
 
-# --------------------------------------------------------------------------
-# Traffic / alerts / connections
-# --------------------------------------------------------------------------
 @app.get("/api/traffic")
 def get_traffic(dataset: str = "nsl_kdd", limit: int = 20, variant: str = ACTIVE_DETECTOR_VARIANT):
-    """A rolling window of real test-set records replayed through the detector, for the live activity view."""
     _validate_variant(variant)
     ctx = _get_context(dataset)
     data = ctx["data"]
@@ -351,7 +303,6 @@ def get_traffic(dataset: str = "nsl_kdd", limit: int = 20, variant: str = ACTIVE
 
 @app.get("/api/alerts")
 def get_alerts(dataset: str = "nsl_kdd", limit: int = 20, variant: str = ACTIVE_DETECTOR_VARIANT):
-    """Records the detector flags as attacks, split into anomalous/critical by its own confidence."""
     _validate_variant(variant)
     ctx = _get_context(dataset)
     data = ctx["data"]
@@ -369,7 +320,7 @@ def get_alerts(dataset: str = "nsl_kdd", limit: int = 20, variant: str = ACTIVE_
         idx = int(idx)
         result = predict_single(model, data["X_test"][idx])
         if result["prediction"] != "attack":
-            continue  # only report records the detector itself flagged
+            continue
         preview = _raw_preview(dataset, idx)
         alerts.append({
             "id": idx,
@@ -390,7 +341,6 @@ def get_alerts(dataset: str = "nsl_kdd", limit: int = 20, variant: str = ACTIVE_
 def get_connections(
     dataset: str = "nsl_kdd", limit: int = 50, offset: int = 0, variant: str = ACTIVE_DETECTOR_VARIANT
 ):
-    """A stable, paginated view over the real test set (unlike /api/traffic, this doesn't resample randomly)."""
     _validate_variant(variant)
     if limit <= 0 or offset < 0:
         raise HTTPException(status_code=400, detail="limit must be positive and offset non-negative")
@@ -425,9 +375,6 @@ def get_connections(
     return {"dataset": dataset, "variant": variant, "total": n_test, "offset": offset, "limit": limit, "rows": rows}
 
 
-# --------------------------------------------------------------------------
-# Prediction / simulation
-# --------------------------------------------------------------------------
 class PredictRequest(BaseModel):
     dataset: str = "nsl_kdd"
     record_index: int
@@ -465,14 +412,7 @@ class SimulateRequest(BaseModel):
 
 @app.post("/api/simulate-attack")
 def simulate_attack(req: SimulateRequest):
-    """
-    Replays a real test-set record through the detector -- no real attacks
-    are performed. "normal" draws from real normal-labeled test records;
-    "anomaly" and "attack" both draw from real attack-labeled test records,
-    differentiated by the detector's own confidence (a clearer-cut case for
-    "attack", a more borderline one for "anomaly") rather than by any
-    fabricated meaning.
-    """
+    """Replay a real test record. 'attack' prefers high-confidence picks, 'anomaly' lower ones."""
     _validate_variant(req.variant)
     ctx = _get_context(req.dataset)
     data = ctx["data"]

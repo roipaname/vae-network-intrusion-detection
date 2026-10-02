@@ -10,10 +10,6 @@ function nodePosition(index, total) {
   return { x: WIDTH / 2 + rx * Math.cos(angle), y: HEIGHT / 2 + ry * Math.sin(angle) };
 }
 
-// A calm, scientific-looking flow diagram: events arrive from surrounding
-// nodes toward a central hub, colored by the detector's real prediction for
-// that real replayed record. Native SVG <animate>/<animateMotion> keeps this
-// lightweight -- no animation loop or extra dependency.
 export default function LiveNetworkVisualization({ events }) {
   const hub = { x: WIDTH / 2, y: HEIGHT / 2 };
 

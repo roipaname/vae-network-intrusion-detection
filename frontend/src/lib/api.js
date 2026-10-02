@@ -1,6 +1,3 @@
-// Thin fetch wrapper around the FastAPI backend. No mock data lives here --
-// every function maps directly to one real endpoint.
-
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 async function request(path, options) {

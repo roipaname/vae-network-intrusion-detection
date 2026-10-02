@@ -1,14 +1,3 @@
-"""
-Measurement utilities used in two places in the pipeline:
-  - Phase 4: how close is VAE-generated synthetic normal traffic to real
-    normal traffic?
-  - Phase 6: how do the baseline and VAE-augmented detectors compare, on the
-    same untouched real test set?
-
-Everything here computes real numbers from real arrays and writes them to
-results/ as JSON — nothing here is a hardcoded or illustrative figure.
-"""
-
 import argparse
 import json
 
@@ -29,15 +18,7 @@ from config.settings import RESULTS_DIR, logger
 
 
 def _split_feature_groups(feature_names: list[str], categorical_cols: list[str]) -> tuple[dict, list[tuple[int, str]]]:
-    """
-    Feature names look like 'cat__protocol_type_tcp' or 'num__duration'
-    (from sklearn's ColumnTransformer). Group the one-hot columns back into
-    their original categorical column, and list the plain numeric columns.
-
-    Returns (categorical_groups, numeric_columns):
-      categorical_groups: {col_name: [(index, category_value), ...]}
-      numeric_columns: [(index, col_name), ...]
-    """
+    """Group one-hot columns back under their original column. Returns (categorical_groups, numeric_columns)."""
     categorical_groups = {col: [] for col in categorical_cols}
     numeric_columns = []
 
@@ -57,7 +38,6 @@ def _split_feature_groups(feature_names: list[str], categorical_cols: list[str])
 
 
 def _compare_numeric(real: np.ndarray, synthetic: np.ndarray, numeric_columns: list[tuple[int, str]]) -> dict:
-    """Per-feature summary stats + a two-sample KS test, real vs synthetic."""
     per_feature = {}
     ks_stats = []
 
@@ -83,13 +63,7 @@ def _compare_numeric(real: np.ndarray, synthetic: np.ndarray, numeric_columns: l
 
 
 def _compare_categorical(real: np.ndarray, synthetic: np.ndarray, categorical_groups: dict) -> dict:
-    """
-    Real one-hot columns are exactly 0/1. The VAE decoder produces continuous
-    values for these columns too (a known limitation of applying a Gaussian
-    reconstruction loss to one-hot data), so we take the argmax within each
-    group as the synthetic sample's "predicted" category before comparing
-    distributions.
-    """
+    """Decoder output is continuous, so take the argmax within each one-hot group."""
     per_group = {}
     tv_distances = []
 
@@ -109,7 +83,6 @@ def _compare_categorical(real: np.ndarray, synthetic: np.ndarray, categorical_gr
         synth_counts = np.bincount(synth_argmax, minlength=len(categories))
         synth_props = (synth_counts / synth_counts.sum()).tolist()
 
-        # Total variation distance between the two category distributions.
         tv_distance = 0.5 * sum(abs(r - s) for r, s in zip(real_props, synth_props))
         tv_distances.append(tv_distance)
 
@@ -127,7 +100,6 @@ def _compare_categorical(real: np.ndarray, synthetic: np.ndarray, categorical_gr
 
 
 def _latent_stats(vae_model, real_normal: np.ndarray) -> dict:
-    """Compare the encoded posterior of real normal data against the N(0, I) prior we sample from."""
     import torch
 
     with torch.no_grad():
@@ -145,17 +117,6 @@ def _latent_stats(vae_model, real_normal: np.ndarray) -> dict:
 
 
 def validate_synthetic_traffic(dataset_name: str, sampling: str = "prior") -> dict:
-    """
-    Compare VAE-generated synthetic normal traffic against real normal
-    traffic and save the report.
-
-    sampling selects which generated set to validate: "prior" (z ~ N(0, I),
-    the textbook approach, and the default used for detector augmentation)
-    or "posterior" (z sampled from a Gaussian fitted to the real data's
-    encoded mu -- see vae.compute_aggregate_posterior). Both are kept as
-    separate result files so the two can be compared directly in the
-    research write-up.
-    """
     from src.data import load_processed
     from src.vae import load_synthetic, load_vae
 
@@ -164,9 +125,6 @@ def validate_synthetic_traffic(dataset_name: str, sampling: str = "prior") -> di
     synthetic = load_synthetic(dataset_name, sampling=sampling)
     feature_names = data["feature_names"]
 
-    # The original categorical column names (e.g. "protocol_type") come from
-    # the fitted preprocessor rather than being re-parsed from feature name
-    # strings, since category values can themselves contain underscores.
     categorical_cols = list(data["preprocessor"].transformers_[0][2])
 
     categorical_groups, numeric_columns = _split_feature_groups(feature_names, categorical_cols)
@@ -203,16 +161,6 @@ def validate_synthetic_traffic(dataset_name: str, sampling: str = "prior") -> di
 
 
 def compare_sampling_strategies(dataset_name: str) -> dict:
-    """
-    Load the prior- and posterior-sampling validation reports for a dataset
-    and summarize the headline discovery for the research write-up: did
-    correcting the prior/aggregate-posterior mismatch actually improve
-    synthetic fidelity?
-
-    Short answer, measured on both datasets: no -- it made fidelity slightly
-    worse. See the "finding" field below for the numbers and a candidate
-    explanation.
-    """
     prior_path = RESULTS_DIR / f"{dataset_name}_synthetic_validation.json"
     posterior_path = RESULTS_DIR / f"{dataset_name}_synthetic_validation_posterior.json"
 
@@ -276,7 +224,7 @@ def compare_sampling_strategies(dataset_name: str) -> dict:
 
 
 def _compute_roc_curve(y_true: np.ndarray, y_proba: np.ndarray, n_points: int = 101) -> dict:
-    """Interpolate the measured ROC curve onto a fixed FPR grid, so baseline/augmented curves overlay cleanly."""
+    """Interpolate onto a fixed FPR grid so the curves can be overlaid."""
     fpr, tpr, _ = roc_curve(y_true, y_proba)
     grid = np.linspace(0, 1, n_points)
     tpr_interp = np.interp(grid, fpr, tpr)
@@ -284,7 +232,6 @@ def _compute_roc_curve(y_true: np.ndarray, y_proba: np.ndarray, n_points: int = 
 
 
 def compute_detector_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_proba: np.ndarray) -> dict:
-    """Accuracy, precision, recall, F1, ROC-AUC, false positive rate, confusion matrix, ROC curve."""
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
     false_positive_rate = fp / (fp + tn) if (fp + tn) > 0 else 0.0
 
@@ -304,7 +251,6 @@ def compute_detector_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_proba: np
 
 
 def evaluate_detector(dataset_name: str, augmented: bool) -> dict:
-    """Evaluate one trained detector (baseline or augmented) on the real test set and save its metrics."""
     from src.data import load_processed
     from src.detector import load_detector
 
@@ -312,7 +258,7 @@ def evaluate_detector(dataset_name: str, augmented: bool) -> dict:
     model = load_detector(dataset_name, augmented=augmented)
 
     y_pred = model.predict(data["X_test"])
-    y_proba = model.predict_proba(data["X_test"])[:, 1]  # P(attack); model.classes_ == [0, 1]
+    y_proba = model.predict_proba(data["X_test"])[:, 1]  # P(attack)
 
     metrics = compute_detector_metrics(data["y_test"], y_pred, y_proba)
     metrics["dataset"] = dataset_name
@@ -334,7 +280,6 @@ def evaluate_detector(dataset_name: str, augmented: bool) -> dict:
 
 
 def compare_detectors(dataset_name: str) -> dict:
-    """Load the baseline/augmented metrics just saved and build a head-to-head comparison for the dashboard."""
     with open(RESULTS_DIR / f"{dataset_name}_baseline_metrics.json") as f:
         baseline = json.load(f)
     with open(RESULTS_DIR / f"{dataset_name}_augmented_metrics.json") as f:
@@ -361,11 +306,7 @@ def compare_detectors(dataset_name: str) -> dict:
 
 
 def compute_feature_importance(dataset_name: str, augmented: bool, top_n: int = 15) -> dict:
-    """
-    Random Forest feature importances, aggregated back from one-hot columns
-    to the original dataset feature names (e.g. all "service_*" columns
-    summed into one "service" importance) so the report is readable.
-    """
+    """Sum one-hot importances back into their original feature."""
     from src.data import load_processed
     from src.detector import load_detector
 
@@ -401,7 +342,6 @@ def compute_feature_importance(dataset_name: str, augmented: bool, top_n: int = 
 
 
 def run_detector_evaluation(dataset_name: str) -> None:
-    """Phase 6 entry point: evaluate both detectors, compare them, and rank feature importance for each."""
     evaluate_detector(dataset_name, augmented=False)
     evaluate_detector(dataset_name, augmented=True)
     compare_detectors(dataset_name)

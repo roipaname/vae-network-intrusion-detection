@@ -1,15 +1,3 @@
-"""
-Variational Autoencoder trained on real normal traffic only.
-
-The VAE learns the distribution of legitimate network traffic so it can later
-generate synthetic normal samples (Phase 4) to augment the intrusion
-detector's training data (Phase 5).
-
-Run directly to train the VAE for one or both datasets:
-
-    uv run python -m src.vae --dataset nsl_kdd
-"""
-
 import argparse
 
 import numpy as np
@@ -36,15 +24,12 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class VAE(nn.Module):
-    """A small MLP encoder/decoder VAE for tabular traffic features."""
-
     def __init__(self, input_dim: int, hidden_dims: list[int] = HIDDEN_DIMS, latent_dim: int = LATENT_DIM):
         super().__init__()
         self.input_dim = input_dim
         self.hidden_dims = hidden_dims
         self.latent_dim = latent_dim
 
-        # Encoder: input -> hidden layers -> (mu, logvar)
         encoder_layers = []
         prev_dim = input_dim
         for h in hidden_dims:
@@ -54,8 +39,7 @@ class VAE(nn.Module):
         self.fc_mu = nn.Linear(prev_dim, latent_dim)
         self.fc_logvar = nn.Linear(prev_dim, latent_dim)
 
-        # Decoder mirrors the encoder in reverse. Final layer is linear
-        # (no activation) since the inputs are standard-scaled, not [0, 1].
+        # no output activation since inputs are standard-scaled
         decoder_layers = []
         prev_dim = latent_dim
         for h in reversed(hidden_dims):
@@ -85,7 +69,7 @@ class VAE(nn.Module):
 
 
 def vae_loss(recon_x, x, mu, logvar, kl_weight: float = KL_WEIGHT):
-    """Reconstruction (MSE) + KL divergence, both summed per-sample then averaged over the batch."""
+    """MSE reconstruction + KL divergence, averaged over the batch."""
     recon_loss = nn.functional.mse_loss(recon_x, x, reduction="sum") / x.size(0)
     kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / x.size(0)
     total_loss = recon_loss + kl_weight * kl_loss
@@ -99,7 +83,6 @@ def train_vae(
     lr: float = VAE_LEARNING_RATE,
     kl_weight: float = KL_WEIGHT,
 ) -> dict:
-    """Train the VAE on the real-normal-only subset of a dataset and save it."""
     torch.manual_seed(RANDOM_SEED)
 
     data = load_processed(dataset_name)
@@ -163,7 +146,6 @@ def train_vae(
 
 
 def load_vae(dataset_name: str) -> VAE:
-    """Load a previously trained VAE for a dataset, ready for inference."""
     checkpoint = torch.load(vae_model_path(dataset_name), map_location=DEVICE, weights_only=False)
     model = VAE(
         input_dim=checkpoint["input_dim"],
@@ -176,16 +158,7 @@ def load_vae(dataset_name: str) -> VAE:
 
 
 def compute_aggregate_posterior(dataset_name: str) -> dict:
-    """
-    Encode all real normal training data and fit a diagonal Gaussian (per
-    latent dimension, mean + std) to the resulting mu vectors.
-
-    This "aggregate posterior" is where real normal traffic actually lives
-    in latent space. Phase 4 validation found it is narrower than the N(0, I)
-    prior (mu std ~0.42 vs the prior's 1.0 on both datasets) -- sampling from
-    the raw prior therefore draws from a wider region than real data occupies,
-    which is the likely cause of the numeric-feature mismatch seen there.
-    """
+    """Fit a diagonal Gaussian to the encoded mu of the real normal training data."""
     model = load_vae(dataset_name)
     data = load_processed(dataset_name)
     X = torch.tensor(data["X_train_normal"], dtype=torch.float32).to(DEVICE)
@@ -198,22 +171,7 @@ def compute_aggregate_posterior(dataset_name: str) -> dict:
 def generate_synthetic(
     dataset_name: str, n_samples: int = SYNTHETIC_SAMPLE_COUNT, sampling: str = "prior"
 ) -> np.ndarray:
-    """
-    Sample from the VAE's latent space and decode into synthetic normal
-    traffic.
-
-    sampling="prior" (default) is the textbook VAE approach: z ~ N(0, I).
-    sampling="posterior" instead samples z from a single diagonal Gaussian
-    fitted to the real data's encoded mu (see compute_aggregate_posterior),
-    a standard-looking correction for the prior/aggregate-posterior mismatch
-    Phase 4 measured (real mu std ~0.42, narrower than the prior's 1.0).
-
-    We tried it (see results/*_latent_sampling_comparison.json): it did not
-    improve fidelity, and made it slightly worse on both datasets. Kept here
-    for comparison and documented as a negative result rather than removed,
-    since it's an informative finding in its own right. "prior" remains the
-    default used for detector augmentation.
-    """
+    """Decode latent samples into synthetic normal traffic. sampling is "prior" or "posterior"."""
     model = load_vae(dataset_name)
 
     if sampling == "prior":
@@ -241,15 +199,6 @@ def _synthetic_path(dataset_name: str, sampling: str):
 
 
 def save_synthetic(dataset_name: str, X_synthetic: np.ndarray, sampling: str = "prior") -> None:
-    """
-    Save synthetic samples separately from real data (never mixed at rest).
-
-    The prior-sampled set is saved as the plain "synthetic_normal.npz" since
-    it's the one used for detector augmentation in Phase 5 (it measured at
-    least as good as, and slightly better than, posterior sampling -- see
-    results/*_latent_sampling_comparison.json). The posterior-sampled set is
-    kept alongside it under its own name as a documented comparison.
-    """
     path = _synthetic_path(dataset_name, sampling)
     np.savez_compressed(path, X=X_synthetic)
     logger.info(f"[{dataset_name}] saved {sampling}-sampled synthetic normal traffic to {path}")

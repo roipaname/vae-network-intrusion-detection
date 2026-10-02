@@ -1,5 +1,4 @@
-// Chart libraries need literal color values (SVG attributes don't resolve
-// CSS custom properties), so these mirror the palette defined in index.css.
+// SVG attributes can't read CSS variables, so these mirror index.css
 export const COLORS = {
   bg: '#f5f6f2',
   primaryDark: '#15191a',

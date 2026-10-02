@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 
-// Generic data-fetching hook. Pass a fetcher function and its dependency
-// array; call `reload()` to refetch (e.g. after a user action).
-//
-// The loading spinner only ever appears before the *first* successful
-// fetch this hook instance has seen. Every refetch after that -- a polling
-// tick, a dataset/variant switch, a manual reload() -- keeps rendering the
-// previous data in place and swaps it out silently once the new response
-// arrives, so the UI never blanks out or flashes "Loading…" on its own.
+// only shows the loading state before the first successful fetch
 export function useApi(fetcher, deps = []) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -41,8 +34,7 @@ export function useApi(fetcher, deps = []) {
   return { data, loading, error, reload: () => setReloadKey((k) => k + 1) };
 }
 
-// Same as useApi, but refetches on an interval -- used for the live
-// traffic/alerts feeds.
+// useApi that refetches on an interval
 export function usePolling(fetcher, deps = [], intervalMs = 4000) {
   const result = useApi(fetcher, deps);
   useEffect(() => {
@@ -53,8 +45,6 @@ export function usePolling(fetcher, deps = [], intervalMs = 4000) {
   return result;
 }
 
-// Tracks whether the backend is actually reachable, for the top bar's live
-// status indicator.
 export function useBackendStatus(intervalMs = 8000) {
   const [online, setOnline] = useState(null);
 
