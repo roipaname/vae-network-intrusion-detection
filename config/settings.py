@@ -60,7 +60,7 @@ def detector_model_path(dataset_name: str, augmented: bool = False):
 
 API_HOST = "0.0.0.0"
 API_PORT = 8000
-CORS_ORIGINS = ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"]
+CORS_ORIGINS = ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3001"]
 
 DATASET_NAMES = ("nsl_kdd", "unsw_nb15")
 DATASET_DISPLAY_NAMES = {"nsl_kdd": "NSL-KDD", "unsw_nb15": "UNSW-NB15"}
